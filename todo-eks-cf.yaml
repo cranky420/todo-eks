@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  VPCCIDR:
+    Type: String
+    Default: "10.80.0.0/16"
+    Description: "CIDR block for the VPC"
+
+  PrivateSubnet1CIDR:
+    Type: String
+    Default: "10.80.1.0/24"
+    Description: "CIDR block for the first private subnet"
+
+  PrivateSubnet2CIDR:
+    Type: String
+    Default: "10.80.2.0/24"
+    Description: "CIDR block for the second private subnet"
+
+  PublicSubnet1CIDR:
+    Type: String
+    Default: "10.80.3.0/24"
+    Description: "CIDR block for the first public subnet"
+
+  PublicSubnet2CIDR:
+    Type: String
+    Default: "10.80.4.0/24"
+    Description: "CIDR block for the second public subnet"
+
+Resources:
+
+  # Create the VPC
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: todo-vpc
+
+  # Create Private Subnet 1
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+        - Key: Name
+          Value: todo-private-subnet-1
+
+  # Create Private Subnet 2
+  PrivateSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+        - Key: Name
+          Value: todo-private-subnet-2
+
+  # Create Public Subnet 1
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1CIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+        - Key: Name
+          Value: todo-public-subnet-1
+
+  # Create Public Subnet 2
+  PublicSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet2CIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+        - Key: Name
+          Value: todo-public-subnet-2
+
+  # Create the Internet Gateway
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: todo-igw
+
+  # Attach Internet Gateway to VPC
+  AttachInternetGateway:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Create EKS Cluster IAM Role
+  EKSClusterRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'eks.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'EKSClusterPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'ec2:DescribeSecurityGroups'
+                  - 'ec2:DescribeSubnets'
+                  - 'ec2:DescribeVpcs'
+                  - 'ec2:CreateNetworkInterface'
+                  - 'ec2:DescribeNetworkInterfaces'
+                Resource: '*'
+
+  # Create the EKS Cluster
+  EKSCluster:
+    Type: 'AWS::EKS::Cluster'
+    Properties:
+      Name: todo-app-cluster
+      RoleArn: !GetAtt EKSClusterRole.Arn
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds: []
+        EndpointPublicAccess: 'true'
+        EndpointPrivateAccess: 'true'
+
+Outputs:
+  ClusterName:
+    Value: !Ref EKSCluster
+    Description: "EKS Cluster Name"
+  VPCId:
+    Value: !Ref VPC
+    Description: "VPC ID"
+  PrivateSubnet1Id:
+    Value: !Ref PrivateSubnet1
+    Description: "Private Subnet 1 ID"
+  PrivateSubnet2Id:
+    Value: !Ref PrivateSubnet2
+    Description: "Private Subnet 2 ID"
+  PublicSubnet1Id:
+    Value: !Ref PublicSubnet1
+    Description: "Public Subnet 1 ID"
+  PublicSubnet2Id:
+    Value: !Ref PublicSubnet2
+    Description: "Public Subnet 2 ID"
